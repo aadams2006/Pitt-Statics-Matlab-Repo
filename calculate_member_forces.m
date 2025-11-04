@@ -2,35 +2,44 @@
 %   Use the 2D truss stiffness method to compute axial forces in each
 %   bridge member. Update the node coordinates, connectivity, supports,
 %   and applied loads in the input section to match your bridge model.
+%   This script is configured for a Fink Truss.
 
 %% Input data ------------------------------------------------------------
 nodeCoords = [ ...            % [x, y] coordinates (m)
     0.0, 0.0;  % Node 1 - left support
-    4.0, 0.0;  % Node 2 - lower panel point
-    8.0, 0.0;  % Node 3 - right support
-    4.0, 3.0]; % Node 4 - upper panel point
+    4.0, 0.0;  % Node 2
+    8.0, 0.0;  % Node 3
+    12.0, 0.0; % Node 4
+    16.0, 0.0; % Node 5 - right support
+    4.0, 2.0;  % Node 6
+    8.0, 4.0;  % Node 7
+    12.0, 2.0; % Node 8
+    8.0, 2.0]; % Node 9
 
 E = 200e9;                     % Modulus of elasticity for steel (Pa)
 A = 4.0e-4;                    % Cross-sectional area for all members (m^2)
 
 members = struct( ...
-    'name', {"BottomChord_L", "BottomChord_R", "Diagonal_L", "Diagonal_R", "TopChord"}, ...
-    'nodes', {[1, 2], [2, 3], [1, 4], [4, 3], [4, 2]}, ...
-    'area',  {A, A, A, A, A}, ...
-    'E',     {E, E, E, E, E});
+    'name', {"BottomChord1", "BottomChord2", "BottomChord3", "BottomChord4", "TopChord1", "TopChord2", "TopChord3", "TopChord4", "Web1", "Web2", "Web3", "Web4", "Web5", "Web6", "Web7", "Web8"}, ...
+    'nodes', {[1, 2], [2, 3], [3, 4], [4, 5], [1, 6], [6, 7], [7, 8], [8, 5], [2, 6], [2, 9], [9, 6], [9, 7], [3, 9], [4, 8], [4, 9], [9,8]}, ...
+    'area',  {A, A, A, A, A, A, A, A, A, A, A, A, A, A, A, A}, ...
+    'E',     {E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E});
 
 % Boundary conditions: restrained degrees of freedom (node, direction)
 % direction: 1 = x, 2 = y
 supports = [ ...
     1, 1;   % Node 1, ux = 0
     1, 2;   % Node 1, uy = 0
-    3, 2];  % Node 3, uy = 0 (roller support)
+    5, 2];  % Node 5, uy = 0 (roller support)
 
 % Applied loads [node, Fx (N), Fy (N)]
 loads = [ ...
-    2, 0.0, -30e3;   % Downward deck reaction at node 2
-    3, 0.0, -30e3;   % Downward deck reaction at node 3
-    4, 0.0, -10e3];  % Top panel point load
+    2, 0.0, -10e3;
+    3, 0.0, -10e3;
+    4, 0.0, -10e3;
+    6, 0.0, -5e3;
+    7, 0.0, -5e3;
+    8, 0.0, -5e3];
 
 %% Assemble global stiffness matrix -------------------------------------
 numNodes = size(nodeCoords, 1);

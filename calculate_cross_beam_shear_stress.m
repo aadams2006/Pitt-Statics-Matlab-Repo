@@ -20,7 +20,8 @@ I = (section.flangeWidth * H^3 - ...
 A_flange = section.flangeWidth * section.flangeThickness;
 A_web = section.webThickness * section.webHeight;
 
-% First moment of area about the neutral axis for the top portion of the
+% First moment of area about the neutral axis for the top p
+ortion of the
 % section (used to find maximum shear stress in the web at the neutral axis).
 Q_na = A_flange * (section.webHeight / 2 + section.flangeThickness / 2) + ...
        (0.5 * A_web) * (section.webHeight / 4);
