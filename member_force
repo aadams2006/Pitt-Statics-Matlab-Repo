@@ -1,0 +1,284 @@
+% Fink Truss Bridge Stress Analysis
+% Bottom length = 18 inches, Symmetric Fink Truss
+% Material: 3/8" x 3/8" Poplar wood
+% Loading: 400 lbs at center bottom (between nodes 2 and 3)
+% Supports: Pin at left, Roller at right
+clear; clc; close all;
+
+%% GEOMETRY SETUP - Using provided coordinates
+% Joint coordinates [x, y] in inches
+joints = [
+    -8.8,  0.0;   % Joint 1 - left support (pin)
+    -2.93, 0.0;   % Joint 2
+     2.93, 0.0;   % Joint 3
+     8.8,  0.0;   % Joint 4 - right support (roller)
+    -4.4,  2.54;  % Joint 5
+     0.0,  5.08;  % Joint 6 - apex
+     4.4,  2.54;  % Joint 7
+];
+
+% Member connectivity [start_joint, end_joint]
+members = [
+    % Bottom chord
+    1, 2;   % Member 1
+    2, 3;   % Member 2
+    3, 4;   % Member 3
+    % Left side
+    1, 5;   % Member 4
+    2, 5;   % Member 5
+    5, 6;   % Member 6
+    2, 6;   % Member 7
+    % Right side (symmetric)
+    3, 6;   % Member 8
+    6, 7;   % Member 9
+    3, 7;   % Member 10
+    4, 7;   % Member 11
+];
+
+%% MATERIAL PROPERTIES - Poplar Wood
+width = 3/8;    % inches
+height = 3/8;   % inches
+A = width * height; % Cross-sectional area = 0.140625 in^2
+
+% Poplar (American) wood properties
+E = 1.58e6;     % Young's modulus for Poplar (psi)
+                % Range: 1.4-1.7 million psi
+
+%% LOADING CONDITIONS
+% 400 lbs downward at center of bottom beam (x=0, y=0)
+% Since there's no node at x=0, we need to distribute the load
+% The load point is at the center between nodes 2 and 3
+% We'll apply half the load to each node
+loads = [
+    2, 0, -200;  % 200 lb at node 2
+    3, 0, -200;  % 200 lb at node 3
+];
+
+%% SUPPORT CONDITIONS
+% Pin support at joint 1 (restricts x and y movement)
+% Roller support at joint 4 (restricts y only, allows x movement)
+fixed_dofs = [1, 2, 8]; % DOFs: joint1_x(1), joint1_y(2), joint4_y(8)
+
+%% ANALYSIS
+n_joints = size(joints, 1);
+n_members = size(members, 1);
+n_dof = 2 * n_joints; % 2 DOF per joint (x, y)
+
+% Initialize global stiffness matrix and force vector
+K_global = zeros(n_dof);
+F = zeros(n_dof, 1);
+
+% Assemble global stiffness matrix
+for i = 1:n_members
+    j1 = members(i, 1); % Start joint
+    j2 = members(i, 2); % End joint
+    
+    % Joint coordinates
+    x1 = joints(j1, 1); y1 = joints(j1, 2);
+    x2 = joints(j2, 1); y2 = joints(j2, 2);
+    
+    % Member length and angle
+    dx = x2 - x1;
+    dy = y2 - y1;
+    L_member = sqrt(dx^2 + dy^2);
+    c = dx / L_member; % cos(theta)
+    s = dy / L_member; % sin(theta)
+    
+    % Member stiffness in local coordinates
+    k = (A * E) / L_member;
+    
+    % Transformation matrix
+    T = [c, s, 0, 0;
+         0, 0, c, s];
+    
+    % Member stiffness in global coordinates
+    k_local = k * [1, -1; -1, 1];
+    k_global = T' * k_local * T;
+    
+    % Assembly into global stiffness matrix
+    dofs = [2*j1-1, 2*j1, 2*j2-1, 2*j2];
+    K_global(dofs, dofs) = K_global(dofs, dofs) + k_global;
+end
+
+% Apply loads
+for i = 1:size(loads, 1)
+    joint = loads(i, 1);
+    F(2*joint-1) = F(2*joint-1) + loads(i, 2); % Fx
+    F(2*joint) = F(2*joint) + loads(i, 3);     % Fy
+end
+
+% Apply boundary conditions
+free_dofs = setdiff(1:n_dof, fixed_dofs);
+K_reduced = K_global(free_dofs, free_dofs);
+F_reduced = F(free_dofs);
+
+% Solve for displacements
+U = zeros(n_dof, 1);
+U(free_dofs) = K_reduced \ F_reduced;
+
+%% CALCULATE MEMBER FORCES AND STRESSES
+member_forces = zeros(n_members, 1);
+member_stresses = zeros(n_members, 1);
+member_lengths = zeros(n_members, 1);
+
+fprintf('\n===== FINK TRUSS ANALYSIS RESULTS =====\n');
+fprintf('Load: 400 lbs at center of bottom beam\n');
+fprintf('Material: Poplar Wood (3/8" x 3/8")\n');
+fprintf('Cross-sectional Area: %.4f in^2\n', A);
+fprintf('Young''s Modulus: %.2e psi\n\n', E);
+fprintf('Member  Length(in)  Force(lb)  Stress(psi)  Type\n');
+fprintf('------  ----------  ---------  -----------  ------------\n');
+
+for i = 1:n_members
+    j1 = members(i, 1);
+    j2 = members(i, 2);
+    
+    % Joint coordinates and displacements
+    x1 = joints(j1, 1); y1 = joints(j1, 2);
+    x2 = joints(j2, 1); y2 = joints(j2, 2);
+    u1 = U(2*j1-1); v1 = U(2*j1);
+    u2 = U(2*j2-1); v2 = U(2*j2);
+    
+    % Member properties
+    dx = x2 - x1;
+    dy = y2 - y1;
+    L_member = sqrt(dx^2 + dy^2);
+    c = dx / L_member;
+    s = dy / L_member;
+    
+    % Axial force (positive = tension, negative = compression)
+    force = (E * A / L_member) * ...
+            (c*(u2-u1) + s*(v2-v1));
+    
+    % Stress
+    stress = force / A;
+    
+    % Store results
+    member_forces(i) = force;
+    member_stresses(i) = stress;
+    member_lengths(i) = L_member;
+    
+    % Determine if tension or compression
+    if force > 0.01
+        type = 'Tension';
+    elseif force < -0.01
+        type = 'Compression';
+    else
+        type = 'Zero Force';
+    end
+    
+    fprintf('%3d     %8.3f    %9.2f   %10.2f   %s\n', ...
+            i, L_member, force, stress, type);
+end
+
+%% CALCULATE REACTION FORCES
+R1x = -F(1) + K_global(1, :) * U;  % Horizontal reaction at pin
+R1y = -F(2) + K_global(2, :) * U;  % Vertical reaction at pin
+R4y = -F(8) + K_global(8, :) * U;  % Vertical reaction at roller
+
+fprintf('\n----- REACTION FORCES -----\n');
+fprintf('Left Support (Pin):     Rx = %.2f lb, Ry = %.2f lb\n', R1x, R1y);
+fprintf('Right Support (Roller): Ry = %.2f lb\n', R4y);
+fprintf('Sum of vertical reactions: %.2f lb (should equal 400 lb)\n', R1y + R4y);
+
+%% VISUALIZATION
+figure('Position', [100, 100, 1200, 500]);
+
+% Plot undeformed structure
+subplot(1,2,1);
+hold on; grid on; axis equal;
+title('Fink Truss Structure');
+xlabel('x (inches)'); ylabel('y (inches)');
+
+for i = 1:n_members
+    j1 = members(i, 1);
+    j2 = members(i, 2);
+    plot([joints(j1,1), joints(j2,1)], ...
+         [joints(j1,2), joints(j2,2)], 'b-', 'LineWidth', 2);
+end
+plot(joints(:,1), joints(:,2), 'ro', 'MarkerSize', 8, 'MarkerFaceColor', 'r');
+
+% Add joint numbers
+for i = 1:n_joints
+    text(joints(i,1), joints(i,2)+0.4, sprintf('%d', i), ...
+         'HorizontalAlignment', 'center', 'FontWeight', 'bold', 'FontSize', 10);
+end
+
+% Mark supports and load
+plot(joints(1,1), joints(1,2), 'ks', 'MarkerSize', 14, 'LineWidth', 2); % Pin
+plot(joints(4,1), joints(4,2), 'k^', 'MarkerSize', 14, 'LineWidth', 2); % Roller
+% Show load at center (between nodes 2 and 3)
+quiver(0, 0.8, 0, -1.2, 'r', 'LineWidth', 3, 'MaxHeadSize', 0.8);
+text(0.5, 1.0, '400 lb', 'Color', 'r', 'FontWeight', 'bold', 'FontSize', 12);
+
+% Plot member forces (color-coded)
+subplot(1,2,2);
+hold on; grid on; axis equal;
+title('Member Forces (Red=Compression, Blue=Tension)');
+xlabel('x (inches)'); ylabel('y (inches)');
+
+max_force = max(abs(member_forces));
+for i = 1:n_members
+    j1 = members(i, 1);
+    j2 = members(i, 2);
+    
+    % Color based on tension/compression
+    if member_forces(i) > 0.01
+        color = [0, 0, 1]; % Blue for Tension
+    elseif member_forces(i) < -0.01
+        color = [1, 0, 0]; % Red for Compression
+    else
+        color = [0.5, 0.5, 0.5]; % Gray for zero force
+    end
+    
+    % Line width proportional to force magnitude
+    if max_force > 0
+        lw = 1 + 4 * abs(member_forces(i)) / max_force;
+    else
+        lw = 2;
+    end
+    
+    plot([joints(j1,1), joints(j2,1)], ...
+         [joints(j1,2), joints(j2,2)], 'Color', color, 'LineWidth', lw);
+    
+    % Add member numbers at midpoint
+    mx = (joints(j1,1) + joints(j2,1)) / 2;
+    my = (joints(j1,2) + joints(j2,2)) / 2;
+    text(mx, my, sprintf('%d', i), 'BackgroundColor', 'w', ...
+         'EdgeColor', 'k', 'FontSize', 8, 'HorizontalAlignment', 'center');
+end
+plot(joints(:,1), joints(:,2), 'ko', 'MarkerSize', 8, 'MarkerFaceColor', 'k');
+
+fprintf('\n======================================\n\n');
+fprintf('Maximum Tensile Stress:     %.2f psi (Member %d)\n', ...
+        max(member_stresses), find(member_stresses == max(member_stresses), 1));
+fprintf('Maximum Compressive Stress: %.2f psi (Member %d)\n', ...
+        abs(min(member_stresses)), find(member_stresses == min(member_stresses), 1));
+
+fprintf('\n----- SAFETY FACTOR ANALYSIS -----\n');
+% Typical strength values for Poplar wood
+tensile_strength = 6000;    % psi (typical for poplar)
+compressive_strength = 5000; % psi (typical for poplar parallel to grain)
+
+SF_tension = tensile_strength / max(member_stresses);
+SF_compression = compressive_strength / abs(min(member_stresses));
+
+fprintf('Tensile Strength of Poplar:     ~%d psi\n', tensile_strength);
+fprintf('Compressive Strength of Poplar: ~%d psi\n', compressive_strength);
+fprintf('Safety Factor (Tension):        %.2f\n', SF_tension);
+fprintf('Safety Factor (Compression):    %.2f\n', SF_compression);
+
+if SF_tension < 2 || SF_compression < 2
+    fprintf('\nWARNING: Safety factor below 2.0! Consider reinforcing members.\n');
+else
+    fprintf('\nDesign appears adequate with sufficient safety factors.\n');
+end
+
+%% DISPLACEMENT ANALYSIS
+fprintf('\n----- MAXIMUM DEFLECTION -----\n');
+max_deflection = max(abs(U(2:2:end))); % Maximum vertical deflection
+fprintf('Maximum vertical deflection: %.4f inches\n', max_deflection);
+
+% Deflection at center (average of nodes 2 and 3)
+deflection_center = (abs(U(4)) + abs(U(6))) / 2;
+fprintf('Deflection at load point:    %.4f inches\n', deflection_center);
