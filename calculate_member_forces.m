@@ -7,9 +7,9 @@
 %% Input data ------------------------------------------------------------
 nodeCoords = [ ...            % [x, y] coordinates (m)
     0.0, 0.0;  % Node 1 - left support
-    4.0, 0.0;  % Node 2
+    5.87, 0.0;  % Node 2
     8.0, 0.0;  % Node 3
-    12.0, 0.0; % Node 4
+    11.73, 0.0; % Node 4
     16.0, 0.0; % Node 5 - right support
     4.0, 2.0;  % Node 6
     8.0, 4.0;  % Node 7
