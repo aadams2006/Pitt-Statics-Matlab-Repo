@@ -248,37 +248,3 @@ for i = 1:n_members
          'EdgeColor', 'k', 'FontSize', 8, 'HorizontalAlignment', 'center');
 end
 plot(joints(:,1), joints(:,2), 'ko', 'MarkerSize', 8, 'MarkerFaceColor', 'k');
-
-fprintf('\n======================================\n\n');
-fprintf('Maximum Tensile Stress:     %.2f psi (Member %d)\n', ...
-        max(member_stresses), find(member_stresses == max(member_stresses), 1));
-fprintf('Maximum Compressive Stress: %.2f psi (Member %d)\n', ...
-        abs(min(member_stresses)), find(member_stresses == min(member_stresses), 1));
-
-fprintf('\n----- SAFETY FACTOR ANALYSIS -----\n');
-% Typical strength values for Poplar wood
-tensile_strength = 6000;    % psi (typical for poplar)
-compressive_strength = 5000; % psi (typical for poplar parallel to grain)
-
-SF_tension = tensile_strength / max(member_stresses);
-SF_compression = compressive_strength / abs(min(member_stresses));
-
-fprintf('Tensile Strength of Poplar:     ~%d psi\n', tensile_strength);
-fprintf('Compressive Strength of Poplar: ~%d psi\n', compressive_strength);
-fprintf('Safety Factor (Tension):        %.2f\n', SF_tension);
-fprintf('Safety Factor (Compression):    %.2f\n', SF_compression);
-
-if SF_tension < 2 || SF_compression < 2
-    fprintf('\nWARNING: Safety factor below 2.0! Consider reinforcing members.\n');
-else
-    fprintf('\nDesign appears adequate with sufficient safety factors.\n');
-end
-
-%% DISPLACEMENT ANALYSIS
-fprintf('\n----- MAXIMUM DEFLECTION -----\n');
-max_deflection = max(abs(U(2:2:end))); % Maximum vertical deflection
-fprintf('Maximum vertical deflection: %.4f inches\n', max_deflection);
-
-% Deflection at center (average of nodes 2 and 3)
-deflection_center = (abs(U(4)) + abs(U(6))) / 2;
-fprintf('Deflection at load point:    %.4f inches\n', deflection_center);
