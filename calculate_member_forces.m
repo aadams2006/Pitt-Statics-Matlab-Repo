@@ -8,13 +8,13 @@
 % Node 3 is located at the origin on the bottom chord to match the bridge
 % coordinate system used in the design models.
 nodeCoords = [ ...            % [x, y] coordinates (m)
-    -6.0, 0.0;   % Node 1  - left support
-    -2.0, 0.0;   % Node 2
+    -8.8, 0.0;   % Node 1  - left support
+    -2.93, 0.0;   % Node 2
      0.0, 0.0;   % Node 3  - bottom chord center (origin)
-     6.0, 0.0;   % Node 4  - right support
-    -3.0, 3.0;   % Node 5
-     0.0, 5.0;   % Node 6 - apex
-     3.0, 3.0];  % Node 7
+     8.8, 0.0;   % Node 4  - right support
+    -4.4, 2.54;   % Node 5
+     0.0, 5.08;   % Node 6 - apex
+     4.4, 2.54];  % Node 7
 
 E = 200e9;                     % Modulus of elasticity for steel (Pa)
 A = 4.0e-4;                    % Cross-sectional area for all members (m^2)
