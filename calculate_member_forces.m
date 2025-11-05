@@ -1,7 +1,7 @@
 % CALCULATE_MEMBER_FORCES.M
 %   Use the 2D truss stiffness method to compute axial forces in each
 %   bridge member. Update the node coordinates, connectivity, supports,
-%   and applied loads in the input section to match your bridge model.
+%   and applied loads in the input section to match the bridge model.
 %   This script is configured for a Fink Truss.
 
 %% Input data ------------------------------------------------------------
