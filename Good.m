@@ -95,7 +95,7 @@ A_bolt = pi * (bolt_diameter/2)^2;        % Bolt cross-sectional area (mm²)
 A_bearing = bolt_diameter * width;        % Bearing area = bolt diameter × wood thickness
 
 %% LOADING & SUPPORTS
-% 250 lbf total load split equally between nodes 2 and 3 (center of bridge)
+% 200 lbf total load split equally between nodes 2 and 3 (center of bridge)
 loads = [2, 0, -100; 3, 0, -100];  % [joint#, Fx, Fy] in lbf
 % Fixed DOFs: DOF 1 = joint1_x, DOF 2 = joint1_y, DOF 8 = joint4_y
 % This creates: pin support at joint 1 (can't move) and roller at joint 4 (can slide horizontally)
@@ -271,7 +271,7 @@ fprintf('===============================================================\n');
 
 % Bottom chord acts as a continuous beam from joint 1 to joint 4
 beam_span = abs(joints(4,1) - joints(1,1));  % Total span (mm)
-total_load_N = 250 * lb_to_N;                 % Total load in N
+total_load_N = 200 * lb_to_N;                 % Total load in N
 
 % For a simply supported beam with center point load P:
 % Maximum shear occurs at supports and equals P/2
@@ -282,7 +282,7 @@ V_max = total_load_N / 2;  % Max shear force (N)
 tau_beam = 1.5 * V_max / A;
 
 fprintf('Bottom chord span:      %.2f mm\n', beam_span);
-fprintf('Total load:             %.2f lbf\n', 250);
+fprintf('Total load:             %.2f lbf\n', 200);
 fprintf('Max shear force:        %.2f lbf (at supports)\n', V_max / lb_to_N);
 fprintf('Max shear stress:       %.2f MPa\n', tau_beam);
 fprintf('Allowable shear:        %.2f MPa\n', tau_shear_allow);
