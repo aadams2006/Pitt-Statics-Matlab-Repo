@@ -10,10 +10,10 @@ lb_to_N = 4.448;   % Convert pounds-force to Newtons
 % Joint coordinates [x, y] in inches (converted to mm below)
 % These define the 9 connection points of the truss after adding two new joints
 base_joints_in = [
-    -8.8,  0.0;   % 1 - left support (pin - fixed in x and y)
+    -8.5,  0.0;   % 1 - left support (pin - fixed in x and y)
     -2.93, 0.0;   % 2 - bottom chord connection point
      2.93, 0.0;   % 3 - bottom chord connection point
-     8.8,  0.0;   % 4 - right support (roller - fixed in y only)
+     8.5,  0.0;   % 4 - right support (roller - fixed in y only)
     -4.4,  2.54;  % 5 - left upper joint
      0.0,  5.08;  % 6 - apex (top center)
      4.4,  2.54;  % 7 - right upper joint
