@@ -24,44 +24,53 @@ target_angle_deg = 45;  % Symmetric 45° brace to minimize member length and pro
 target_angle_rad = deg2rad(target_angle_deg);
 
 % New joint on member 1-2 connected to joint 5
-dy_left_in = joints_in(5, 2);                  % Vertical offset from joint 5 to bottom chord (in)
+dy_left_in = joints_in(5, 2);                     % Vertical offset from joint 5 to bottom chord (in)
 dx_left_in = dy_left_in / tan(target_angle_rad);
-joint8_in = [joints_in(5, 1) - dx_left_in, 0]; % Joint 8 - brace connection on member 1-2
+joint8_in = [joints_in(5, 1) - dx_left_in, 0];    % Joint 8 - brace connection on member 1-2
 
 % New joint on member 3-4 connected to joint 7
 dy_right_in = joints_in(7, 2);
 dx_right_in = dy_right_in / tan(target_angle_rad);
-joint9_in = [joints_in(7, 1) + dx_right_in, 0]; % Joint 9 - brace connection on member 3-4
+joint9_in = [joints_in(7, 1) + dx_right_in, 0];   % Joint 9 - brace connection on member 3-4
+
+% Register joint indices before appending (clarifies the new joint numbering)
+joint8_index = size(joints_in, 1) + 1;
+joint9_index = joint8_index + 1;
 
 % Append new joints and convert to millimeters
 joints_in = [joints_in; joint8_in; joint9_in];
 joints = joints_in * in_to_mm;
 
+fprintf('Joint %d placed on member 1-2 at (%.3f, %.3f) in\n', joint8_index, joint8_in(1), joint8_in(2));
+fprintf('Joint %d placed on member 3-4 at (%.3f, %.3f) in\n', joint9_index, joint9_in(1), joint9_in(2));
+
 % Report the resulting brace angles (acute angle relative to the bottom chord)
-angle_5_to_8 = abs(atand((joints(5,2) - joints(8,2)) / (joints(8,1) - joints(5,1))));
-angle_7_to_9 = abs(atand((joints(7,2) - joints(9,2)) / (joints(9,1) - joints(7,1))));
-fprintf('New member 5-8 angle to horizontal: %.2f degrees\n', angle_5_to_8);
-fprintf('New member 7-9 angle to horizontal: %.2f degrees\n', angle_7_to_9);
+angle_5_to_8 = abs(atand((joints(5,2) - joints(joint8_index,2)) / ...
+                        (joints(joint8_index,1) - joints(5,1))));
+angle_7_to_9 = abs(atand((joints(7,2) - joints(joint9_index,2)) / ...
+                        (joints(joint9_index,1) - joints(7,1))));
+fprintf('New member 5-%d angle to horizontal: %.2f degrees\n', joint8_index, angle_5_to_8);
+fprintf('New member 7-%d angle to horizontal: %.2f degrees\n', joint9_index, angle_7_to_9);
 
 % Members [start, end]
 % Note: Bottom chord (members 1-5) is physically one continuous beam
 % but modeled as 5 segments for truss analysis (including new brace joints)
 members = [
-    1, 8;   % 1  - Bottom chord (left outer segment)
-    8, 2;   % 2  - Bottom chord (left inner segment)
-    2, 3;   % 3  - Bottom chord (center segment)
-    3, 9;   % 4  - Bottom chord (right inner segment)
-    9, 4;   % 5  - Bottom chord (right outer segment)
-    1, 5;   % 6  - Left diagonal
-    2, 5;   % 7  - Left vertical
-    5, 6;   % 8  - Left diagonal
-    2, 6;   % 9  - Left diagonal
-    3, 6;   % 10 - Right diagonal
-    6, 7;   % 11 - Right diagonal
-    3, 7;   % 12 - Right vertical
-    4, 7;   % 13 - Right diagonal
-    5, 8;   % 14 - New left 45° brace
-    7, 9;   % 15 - New right 45° brace
+    1, joint8_index;    % 1  - Bottom chord (left outer segment)
+    joint8_index, 2;    % 2  - Bottom chord (left inner segment)
+    2, 3;               % 3  - Bottom chord (center segment)
+    3, joint9_index;    % 4  - Bottom chord (right inner segment)
+    joint9_index, 4;    % 5  - Bottom chord (right outer segment)
+    1, 5;               % 6  - Left diagonal
+    2, 5;               % 7  - Left vertical
+    5, 6;               % 8  - Left diagonal
+    2, 6;               % 9  - Left diagonal
+    3, 6;               % 10 - Right diagonal
+    6, 7;               % 11 - Right diagonal
+    3, 7;               % 12 - Right vertical
+    4, 7;               % 13 - Right diagonal
+    5, joint8_index;    % 14 - New left brace
+    7, joint9_index;    % 15 - New right brace
 ];
 
 %% MATERIAL PROPERTIES
