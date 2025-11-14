@@ -7,9 +7,9 @@ in_to_mm = 25.4;   % Convert inches to millimeters
 lb_to_N = 4.448;   % Convert pounds-force to Newtons
 
 %% GEOMETRY
-% Joint coordinates [x, y] in mm
-% These define the 7 connection points of the truss
-joints = [
+% Joint coordinates [x, y] in inches (converted to mm below)
+% These define the 9 connection points of the truss after adding two new joints
+joints_in = [
     -8.8,  0.0;   % 1 - left support (pin - fixed in x and y)
     -2.93, 0.0;   % 2 - bottom chord connection point
      2.93, 0.0;   % 3 - bottom chord connection point
@@ -17,23 +17,51 @@ joints = [
     -4.4,  2.54;  % 5 - left upper joint
      0.0,  5.08;  % 6 - apex (top center)
      4.4,  2.54;  % 7 - right upper joint
-] * in_to_mm;
+];
+
+% Determine optimal (45°) brace connections for new members
+target_angle_deg = 45;  % Symmetric 45° brace to minimize member length and provide efficient load path
+target_angle_rad = deg2rad(target_angle_deg);
+
+% New joint on member 1-2 connected to joint 5
+dy_left_in = joints_in(5, 2);                  % Vertical offset from joint 5 to bottom chord (in)
+dx_left_in = dy_left_in / tan(target_angle_rad);
+joint8_in = [joints_in(5, 1) - dx_left_in, 0]; % Joint 8 - brace connection on member 1-2
+
+% New joint on member 3-4 connected to joint 7
+dy_right_in = joints_in(7, 2);
+dx_right_in = dy_right_in / tan(target_angle_rad);
+joint9_in = [joints_in(7, 1) + dx_right_in, 0]; % Joint 9 - brace connection on member 3-4
+
+% Append new joints and convert to millimeters
+joints_in = [joints_in; joint8_in; joint9_in];
+joints = joints_in * in_to_mm;
+
+% Report the resulting brace angles (acute angle relative to the bottom chord)
+angle_5_to_8 = abs(atand((joints(5,2) - joints(8,2)) / (joints(8,1) - joints(5,1))));
+angle_7_to_9 = abs(atand((joints(7,2) - joints(9,2)) / (joints(9,1) - joints(7,1))));
+fprintf('New member 5-8 angle to horizontal: %.2f degrees\n', angle_5_to_8);
+fprintf('New member 7-9 angle to horizontal: %.2f degrees\n', angle_7_to_9);
 
 % Members [start, end]
-% Note: Bottom chord (members 1-3) is physically one continuous beam
-% but modeled as 3 segments for truss analysis
+% Note: Bottom chord (members 1-5) is physically one continuous beam
+% but modeled as 5 segments for truss analysis (including new brace joints)
 members = [
-    1, 2;   % 1  - Bottom chord (left section)
-    2, 3;   % 2  - Bottom chord (middle section)
-    3, 4;   % 3  - Bottom chord (right section)
-    1, 5;   % 4  - Left diagonal
-    2, 5;   % 5  - Left vertical
-    5, 6;   % 6  - Left diagonal
-    2, 6;   % 7  - Left diagonal
-    3, 6;   % 8  - Right diagonal
-    6, 7;   % 9  - Right diagonal
-    3, 7;   % 10 - Right vertical
-    4, 7;   % 11 - Right diagonal
+    1, 8;   % 1  - Bottom chord (left outer segment)
+    8, 2;   % 2  - Bottom chord (left inner segment)
+    2, 3;   % 3  - Bottom chord (center segment)
+    3, 9;   % 4  - Bottom chord (right inner segment)
+    9, 4;   % 5  - Bottom chord (right outer segment)
+    1, 5;   % 6  - Left diagonal
+    2, 5;   % 7  - Left vertical
+    5, 6;   % 8  - Left diagonal
+    2, 6;   % 9  - Left diagonal
+    3, 6;   % 10 - Right diagonal
+    6, 7;   % 11 - Right diagonal
+    3, 7;   % 12 - Right vertical
+    4, 7;   % 13 - Right diagonal
+    5, 8;   % 14 - New left 45° brace
+    7, 9;   % 15 - New right 45° brace
 ];
 
 %% MATERIAL PROPERTIES
@@ -61,11 +89,11 @@ loads = [2, 0, -100; 3, 0, -100];  % [joint#, Fx, Fy] in lbf
 fixed_dofs = [1, 2, 8];
 
 %% SOLVE FOR DISPLACEMENTS
-n_joints = size(joints, 1);    % Number of joints = 7
-n_members = size(members, 1);  % Number of members = 11
-n_dof = 2 * n_joints;          % Total degrees of freedom = 14 (2 per joint: x and y)
+n_joints = size(joints, 1);    % Number of joints = 9
+n_members = size(members, 1);  % Number of members = 15
+n_dof = 2 * n_joints;          % Total degrees of freedom = 18 (2 per joint: x and y)
 
-% Initialize global stiffness matrix (14×14) and force vector (14×1)
+% Initialize global stiffness matrix (18×18) and force vector (18×1)
 K_global = zeros(n_dof);
 F = zeros(n_dof, 1);
 
