@@ -1,0 +1,410 @@
+% Simplified Fink Truss Analysis with 45° Diagonal Members
+% 200 lbf load at center, Poplar wood 9.525mm x 9.525mm
+clear; clc;
+
+%% UNIT CONVERSIONS
+in_to_mm = 25.4;   % Convert inches to millimeters
+lb_to_N = 4.448;   % Convert pounds-force to Newtons
+
+%% GEOMETRY
+% Joint coordinates [x, y] in mm
+% These define the 9 connection points of the truss (added 2 new joints)
+joints = [
+    -8.5,  0.0;   % 1 - left support (pin - fixed in x and y)
+    -2.93, 0.0;   % 2 - bottom chord connection point
+     2.93, 0.0;   % 3 - bottom chord connection point
+     8.5,  0.0;   % 4 - right support (roller - fixed in y only)
+    -4.4,  2.54;  % 5 - left upper joint (C)
+     0.0,  5.08;  % 6 - apex (top center)
+     4.4,  2.54;  % 7 - right upper joint (G)
+    -6.95, 0.0;   % 8 - NEW: connection point for 45° diagonal from C
+     6.95, 0.0;   % 9 - NEW: connection point for 45° diagonal from G
+] * in_to_mm;
+
+% Calculate the positions for 45° diagonals from C and G
+% From C (joint 5): 45° diagonal going down-left
+y_C = joints(5,2);  % Height of C
+x_C_end = joints(5,1) - y_C;  % 45° means dx = -dy
+joints(8,:) = [x_C_end, 0];  % Update joint 8 position
+
+% From G (joint 7): 45° diagonal going down-right  
+y_G = joints(7,2);  % Height of G
+x_G_end = joints(7,1) + y_G;  % 45° means dx = dy
+joints(9,:) = [x_G_end, 0];  % Update joint 9 position
+
+% Members [start, end]
+% Note: Bottom chord is physically one continuous beam
+% but modeled as 5 segments now to include new connection points
+members = [
+    1, 8;   % 1  - Bottom chord (far left section)
+    8, 2;   % 2  - Bottom chord (left section)
+    2, 3;   % 3  - Bottom chord (middle section)
+    3, 9;   % 4  - Bottom chord (right section)
+    9, 4;   % 5  - Bottom chord (far right section)
+    1, 5;   % 6  - Left diagonal
+    2, 5;   % 7  - Left vertical
+    5, 6;   % 8  - Left diagonal (RABBIT JOINT)
+    2, 6;   % 9  - Left diagonal
+    3, 6;   % 10 - Right diagonal
+    6, 7;   % 11 - Right diagonal (RABBIT JOINT)
+    3, 7;   % 12 - Right vertical
+    4, 7;   % 13 - Right diagonal
+    5, 8;   % 14 - NEW: 45° diagonal from C to left
+    7, 9;   % 15 - NEW: 45° diagonal from G to right
+];
+
+%% MATERIAL PROPERTIES
+width = 9.525;                            % mm (3/8")
+height = 9.525;                           % mm (3/8")
+A_full = width * height;                  % Full cross-sectional area = 90.7 mm²
+E = 8400;                                 % Young's modulus = 8400 MPa (compression)
+
+% Allowable stresses for Poplar wood (MPa)
+sigma_tension_allow = 75;                 % Maximum tension stress
+sigma_compression_allow = 38;             % Maximum compression stress
+tau_shear_allow = 45;                     % Maximum shear stress
+sigma_bearing_allow = 38;                 % Maximum bearing stress (crushing)
+
+% Bolt/Pin connection properties
+bolt_diameter = 4.166;                    % mm (0.164")
+A_bolt = pi * (bolt_diameter/2)^2;        % Bolt cross-sectional area (mm²)
+A_bearing = bolt_diameter * width;        % Bearing area = bolt diameter × wood thickness
+
+% Area reductions
+bolt_hole_width = (3/8 - 0.164) * in_to_mm;  % Net width after bolt hole
+A_with_bolt = bolt_hole_width * height;      % Area with bolt hole = 44.45 mm²
+A_rabbit = A_full / 2;                       % Rabbit joint cuts area in half = 45.35 mm²
+
+% Define which members have rabbit joints
+% Members 6 and 13: diagonals connecting to joints 5 (C) and 7 (G)
+% Members 8 and 11: diagonals to apex (original rabbit joints)
+% Members 14 and 15: new 45° diagonals from C and G
+rabbit_members = [6, 8, 11, 13, 14, 15];
+
+%% LOADING & SUPPORTS
+% 200 lbf total load split equally between nodes 2 and 3 (center of bridge)
+loads = [2, 0, -100; 3, 0, -100];  % [joint#, Fx, Fy] in lbf
+% Fixed DOFs: DOF 1 = joint1_x, DOF 2 = joint1_y, DOF 8 = joint4_y
+% This creates: pin support at joint 1 (can't move) and roller at joint 4 (can slide horizontally)
+fixed_dofs = [1, 2, 8];
+
+%% SOLVE FOR DISPLACEMENTS
+n_joints = size(joints, 1);    % Number of joints = 9
+n_members = size(members, 1);  % Number of members = 15
+n_dof = 2 * n_joints;          % Total degrees of freedom = 18 (2 per joint: x and y)
+
+% Initialize global stiffness matrix (18×18) and force vector (18×1)
+K_global = zeros(n_dof);
+F = zeros(n_dof, 1);
+
+% Assemble global stiffness matrix
+% This loop builds the structural stiffness matrix by adding each member's contribution
+for i = 1:n_members
+    j1 = members(i, 1);  % Start joint number
+    j2 = members(i, 2);  % End joint number
+    
+    % Calculate member geometry
+    dx = joints(j2,1) - joints(j1,1);  % Change in x
+    dy = joints(j2,2) - joints(j1,2);  % Change in y
+    L = sqrt(dx^2 + dy^2);             % Member length
+    c = dx/L;  % Cosine of angle (direction cosine in x)
+    s = dy/L;  % Sine of angle (direction cosine in y)
+    
+    % Determine cross-sectional area for this member
+    if ismember(i, rabbit_members)
+        A = A_rabbit;  % Rabbit joint reduces area by half
+    else
+        A = A_full;    % Full area
+    end
+    
+    % Member axial stiffness: k = (Area × Young's Modulus) / Length
+    k = (A * E) / L;
+    
+    % Transformation matrix: converts local (along member) to global (x,y) coordinates
+    T = [c, s, 0, 0;
+         0, 0, c, s];
+    
+    % Local stiffness matrix (tension-compression only)
+    k_local = k * [1, -1; -1, 1];
+    
+    % Transform to global coordinates
+    k_global = T' * k_local * T;
+    
+    % Add member stiffness to global matrix at appropriate DOFs
+    % DOFs for joints: [j1_x, j1_y, j2_x, j2_y]
+    dofs = [2*j1-1, 2*j1, 2*j2-1, 2*j2];
+    K_global(dofs, dofs) = K_global(dofs, dofs) + k_global;
+end
+
+% Apply loads to force vector
+for i = 1:size(loads, 1)
+    joint = loads(i, 1);
+    F(2*joint-1) = F(2*joint-1) + loads(i, 2) * lb_to_N;  % Fx (convert lbf to N)
+    F(2*joint) = F(2*joint) + loads(i, 3) * lb_to_N;      % Fy (convert lbf to N)
+end
+
+% Solve for displacements
+% Remove rows/columns for fixed DOFs (supports), then solve K*U = F
+free_dofs = setdiff(1:n_dof, fixed_dofs);  % Find which DOFs can move
+U = zeros(n_dof, 1);                        % Initialize displacement vector
+U(free_dofs) = K_global(free_dofs, free_dofs) \ F(free_dofs);  % Solve for free DOFs
+
+%% ========================================
+%% 1. MEMBER FORCES & NORMAL STRESSES
+%% ========================================
+fprintf('\n===============================================================\n');
+fprintf('1. MEMBER FORCES & NORMAL STRESSES\n');
+fprintf('===============================================================\n');
+fprintf('Member  Force(lbf) Type  Area(mm²)  Normal Stress(MPa)  Allowable  Status\n');
+fprintf('------  ---------- ----  ---------  ------------------  ---------  ------\n');
+
+member_forces = zeros(n_members, 1);
+for i = 1:n_members
+    j1 = members(i, 1);
+    j2 = members(i, 2);
+    
+    % Member geometry (same as before)
+    dx = joints(j2,1) - joints(j1,1);
+    dy = joints(j2,2) - joints(j1,2);
+    L = sqrt(dx^2 + dy^2);
+    c = dx/L;
+    s = dy/L;
+    
+    % Determine cross-sectional area for this member
+    if ismember(i, rabbit_members)
+        A = A_rabbit;  % Rabbit joint reduces area by half
+    else
+        A = A_full;    % Full area
+    end
+    
+    % Get displacements at each end of member
+    u1 = U(2*j1-1); v1 = U(2*j1);  % Joint 1 displacements (x, y)
+    u2 = U(2*j2-1); v2 = U(2*j2);  % Joint 2 displacements (x, y)
+    
+    % Calculate axial force: F  = (E*A/L) × elongation
+    % Elongation = projection of displacement difference onto member axis
+    force_N = (E * A / L) * (c*(u2-u1) + s*(v2-v1));
+    force_lbf = force_N / lb_to_N;  % Convert to lbf for display
+    
+    % Normal stress: σ = Force / Area
+    stress = force_N / A;
+    
+    member_forces(i) = force_lbf;
+    
+    % Determine type and check against appropriate allowable stress
+    if force_N > 0.01
+        type = 'T';  % Tension (positive force = pulling)
+        allowable = sigma_tension_allow;
+    elseif force_N < -0.01
+        type = 'C';  % Compression (negative force = pushing)
+        allowable = sigma_compression_allow;
+        stress = abs(stress);  % Use absolute value for comparison
+    else
+        type = 'Z';  % Zero force (very small)
+        allowable = sigma_compression_allow;
+        stress = 0;
+    end
+    
+    % Check if stress is within allowable limit
+    status = iif(stress <= allowable, 'PASS', 'FAIL');
+    
+    fprintf('%3d     %10.2f %s     %7.2f    %13.2f       %9.2f  %s', ...
+            i, force_lbf, type, A, stress, allowable, status);
+    if ismember(i, rabbit_members)
+        fprintf(' (rabbit)');
+    end
+    if i == 14
+        fprintf(' (45° from C)');
+    elseif i == 15
+        fprintf(' (45° from G)');
+    end
+    fprintf('\n');
+end
+fprintf('\nNote: T=Tension, C=Compression, Z=Zero\n');
+
+%% ========================================
+%% 2. SHEAR STRESS AT JOINTS (Double Shear)
+%% ========================================
+fprintf('\n===============================================================\n');
+fprintf('2. SHEAR STRESS AT JOINTS (Double Shear)\n');
+fprintf('===============================================================\n');
+
+% Find maximum force at each joint from all connected members
+joint_forces = zeros(n_joints, 1);
+for i = 1:n_joints
+    connected_members = find(members(:,1) == i | members(:,2) == i);
+    if ~isempty(connected_members)
+        joint_forces(i) = max(abs(member_forces(connected_members)));
+    end
+end
+
+fprintf('Joint  Max Force(lbf)  Shear Stress(MPa)  Allowable  Status  Notes\n');
+fprintf('-----  -------------  -----------------  ---------  ------  -----\n');
+
+for i = 1:n_joints
+    % Shear stress in double shear: τ = Force / (2 × bolt area)
+    tau_shear = (joint_forces(i) * lb_to_N) / (2 * A_bolt);
+    
+    status = iif(tau_shear <= tau_shear_allow, 'PASS', 'FAIL');
+    notes = '';
+    if i == 8
+        notes = '(New bolt for 45° diagonal)';
+    elseif i == 9
+        notes = '(New bolt for 45° diagonal)';
+    end
+    fprintf('%3d    %13.2f  %17.2f  %9.2f  %s   %s\n', ...
+            i, joint_forces(i), tau_shear, tau_shear_allow, status, notes);
+end
+
+%% ========================================
+%% 3. BEARING STRESS AT JOINTS
+%% ========================================
+fprintf('\n===============================================================\n');
+fprintf('3. BEARING STRESS AT JOINTS\n');
+fprintf('===============================================================\n');
+fprintf('Joint  Max Force(lbf)  Bearing Stress(MPa)  Allowable  Status  Notes\n');
+fprintf('-----  -------------  -------------------  ---------  ------  -----\n');
+
+for i = 1:n_joints
+    % Bearing stress: σ_bearing = Force / (bolt diameter × wood thickness)
+    % This is the crushing stress on the wood where the bolt contacts it
+    sigma_bearing = (joint_forces(i) * lb_to_N) / A_bearing;
+    
+    status = iif(sigma_bearing <= sigma_bearing_allow, 'PASS', 'FAIL');
+    notes = '';
+    if i == 8
+        notes = '(New bolt for 45° diagonal)';
+    elseif i == 9
+        notes = '(New bolt for 45° diagonal)';
+    end
+    fprintf('%3d    %13.2f  %19.2f  %9.2f  %s   %s\n', ...
+            i, joint_forces(i), sigma_bearing, sigma_bearing_allow, status, notes);
+end
+
+%% ========================================
+%% 4. NORMAL STRESS AT BOLT HOLES
+%% ========================================
+fprintf('\n===============================================================\n');
+fprintf('4. NORMAL STRESS AT BOLT HOLES (Reduced Net Area)\n');
+fprintf('===============================================================\n');
+fprintf('Member  Force(lbf) Type  Net Area(mm²)  Normal Stress(MPa)  Allowable  Status\n');
+fprintf('------  ---------- ----  -------------  ------------------  ---------  ------\n');
+
+for i = 1:n_members
+    % Skip rabbit joint members (already accounted for in section 1)
+    if ismember(i, rabbit_members)
+        continue;
+    end
+    
+    j1 = members(i, 1);
+    j2 = members(i, 2);
+    
+    force_N = member_forces(i) * lb_to_N;
+    
+    % Normal stress at bolt hole: σ = Force / (reduced area at bolt)
+    stress = abs(force_N) / A_with_bolt;
+    
+    % Determine type and check against appropriate allowable stress
+    if force_N > 0.01
+        type = 'T';  % Tension
+        allowable = sigma_tension_allow;
+    elseif force_N < -0.01
+        type = 'C';  % Compression
+        allowable = sigma_compression_allow;
+    else
+        type = 'Z';  % Zero force
+        allowable = sigma_compression_allow;
+        stress = 0;
+    end
+    
+    % Check if stress is within allowable limit
+    status = iif(stress <= allowable, 'PASS', 'FAIL');
+    
+    fprintf('%3d     %10.2f %s     %10.2f    %13.2f       %9.2f  %s\n', ...
+            i, member_forces(i), type, A_with_bolt, stress, allowable, status);
+end
+
+%% ========================================
+%% 5. BOTTOM CHORD BEAM SHEAR STRESS
+%% ========================================
+fprintf('\n===============================================================\n');
+fprintf('5. BOTTOM CHORD BEAM SHEAR STRESS (Continuous Bottom Beam)\n');
+fprintf('===============================================================\n');
+
+% Bottom chord acts as a continuous beam from joint 1 to joint 4
+beam_span = abs(joints(4,1) - joints(1,1));  % Total span (mm)
+total_load_N = 200 * lb_to_N;                 % Total load in N (changed to 200 lbf)
+
+% For a simply supported beam with center point load P:
+% Maximum shear occurs at supports and equals P/2
+V_max = total_load_N / 2;  % Max shear force (N)
+
+% Shear stress for rectangular cross-section: τ = 1.5 × V / Area
+% Factor of 1.5 accounts for parabolic shear distribution
+tau_beam = 1.5 * V_max / A_full;
+
+fprintf('Bottom chord span:      %.2f mm\n', beam_span);
+fprintf('Total load:             %.2f lbf\n', 200);
+fprintf('Max shear force:        %.2f lbf (at supports)\n', V_max / lb_to_N);
+fprintf('Max shear stress:       %.2f MPa\n', tau_beam);
+fprintf('Allowable shear:        %.2f MPa\n', tau_shear_allow);
+fprintf('Status:                 %s\n', iif(tau_beam <= tau_shear_allow, 'PASS', 'FAIL'));
+
+%% SUMMARY
+fprintf('\n===============================================================\n');
+fprintf('SUMMARY - ALL CHECKS\n');
+fprintf('===============================================================\n');
+
+% Check if all members pass their respective stress checks
+all_normal_pass = true;
+all_bolt_pass = true;
+for i = 1:n_members
+    force_N = member_forces(i) * lb_to_N;
+    if ismember(i, rabbit_members)
+        A = A_rabbit;
+    else
+        A = A_full;
+    end
+    stress = abs(force_N / A);
+    
+    if force_N > 0.01
+        all_normal_pass = all_normal_pass && (stress <= sigma_tension_allow);
+    elseif force_N < -0.01
+        all_normal_pass = all_normal_pass && (stress <= sigma_compression_allow);
+    end
+    
+    % Check bolt hole stress for non-rabbit members
+    if ~ismember(i, rabbit_members)
+        stress_bolt = abs(force_N) / A_with_bolt;
+        if force_N > 0.01
+            all_bolt_pass = all_bolt_pass && (stress_bolt <= sigma_tension_allow);
+        elseif force_N < -0.01
+            all_bolt_pass = all_bolt_pass && (stress_bolt <= sigma_compression_allow);
+        end
+    end
+end
+
+all_shear_pass = all((joint_forces*lb_to_N./(2*A_bolt)) <= tau_shear_allow);
+all_bearing_pass = all((joint_forces*lb_to_N./A_bearing) <= sigma_bearing_allow);
+cross_beam_pass = tau_beam <= tau_shear_allow;
+
+fprintf('Normal stresses:        %s\n', iif(all_normal_pass, 'PASS', 'FAIL'));
+fprintf('Bolt hole stresses:     %s\n', iif(all_bolt_pass, 'PASS', 'FAIL'));
+fprintf('Shear at joints:        %s\n', iif(all_shear_pass, 'PASS', 'FAIL'));
+fprintf('Bearing at joints:      %s\n', iif(all_bearing_pass, 'PASS', 'FAIL'));
+fprintf('Bottom chord shear:     %s\n', iif(cross_beam_pass, 'PASS', 'FAIL'));
+fprintf('\nOVERALL:                %s\n', ...
+    iif(all_normal_pass && all_bolt_pass && all_shear_pass && all_bearing_pass && cross_beam_pass, ...
+        'ALL CHECKS PASS', 'DESIGN NEEDS REVIEW'));
+fprintf('===============================================================\n');
+
+
+%% Helper function
+% Simple if-then-else function for returning strings
+function result = iif(condition, true_val, false_val)
+    if condition
+        result = true_val;
+    else
+        result = false_val;
+    end
+end
